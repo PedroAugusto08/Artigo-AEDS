@@ -5,6 +5,10 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 import time
+import community as community_louvain
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+import seaborn as sns
 
 def load_data(file_path):
     """Load movie dataset from CSV."""
@@ -90,16 +94,28 @@ def analyze_centrality(G, metric='degree'):
     top_central_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:3]
     return top_central_nodes
 
-def visualize_graph(G, title, k=0.4):
+def visualize_graph(G, title, partition, k=0.4):
     """Visualize the graph using NetworkX and Matplotlib."""
     pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
-    nx.draw_networkx_nodes(G, pos, node_size=50, node_color='blue', alpha=0.6)
+
+    # Colorir nós de acordo com a comunidade
+    cmap = plt.get_cmap('viridis')
+    communities = set(partition.values())
+    colors = [cmap(partition[node] / len(communities)) for node in G.nodes]
+
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color=colors, alpha=0.6)
     nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
     labels = {node: node for node in G.nodes}  # Exibe todos os rótulos
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
     plt.title(title)
     plt.axis('off')
+
+    # Adicionar legenda
+    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=cmap(i / len(communities)), markersize=10) for i in range(len(communities))]
+    labels = [f'Comunidade {i + 1}' for i in range(len(communities))]
+    plt.legend(handles, labels, loc='best', title='Comunidades')
+
     plt.show()
 
 def measure_execution_time(func, *args, **kwargs):
@@ -135,6 +151,84 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.title("Informações Importantes do Grafo")
     plt.show()
 
+def cluster_graph(G):
+    """Cluster the graph using the greedy modularity method."""
+    communities = list(nx.algorithms.community.greedy_modularity_communities(G))
+    partition = {}
+    for i, community in enumerate(communities):
+        for node in community:
+            partition[node] = i
+    return partition
+
+def analyze_communities(df, partition):
+    """Analyze and print information about each community."""
+    communities = {}
+    for node, community in partition.items():
+        if community not in communities:
+            communities[community] = []
+        communities[community].append(node)
+    
+    for community, nodes in communities.items():
+        print(f"Comunidade {community + 1}:")
+        print(f"Número de filmes: {len(nodes)}")
+        print(f"Filmes: {', '.join(nodes[:10])}...")  # Exibir os primeiros 10 filmes de cada comunidade
+        print()
+
+def analyze_shared_features(df, G):
+    """Analyze shared features between connected movies."""
+    shared_features = {}
+    for edge in G.edges(data=True):
+        movie1, movie2, data = edge
+        shared_features[(movie1, movie2)] = {
+            'similarity': data['weight'],
+            'shared_genres': list(set(df[df['title'] == movie1].iloc[0].filter(like='genre_').index) & set(df[df['title'] == movie2].iloc[0].filter(like='genre_').index)),
+            'runtime_diff': abs(df[df['title'] == movie1]['runtime'].values[0] - df[df['title'] == movie2]['runtime'].values[0]),
+            'rating_diff': abs(df[df['title'] == movie1]['rating'].values[0] - df[df['title'] == movie2]['rating'].values[0]),
+            'gross_earn_diff': abs(df[df['title'] == movie1]['gross_earn'].values[0] - df[df['title'] == movie2]['gross_earn'].values[0])
+        }
+    return shared_features
+
+def feature_importance_analysis(df, target):
+    """Train a model and calculate feature importance for a given target."""
+    # Selecionar features e target
+    feature_cols = ['runtime'] + [col for col in df.columns if col.startswith('genre_')]
+    X = df[feature_cols]
+    y = df[target]
+
+    # Dividir os dados em treino e teste
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Treinar o modelo
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    # Calcular a importância das features
+    importances = model.feature_importances_
+    feature_importance = pd.DataFrame({'feature': feature_cols, 'importance': importances})
+    feature_importance = feature_importance.sort_values(by='importance', ascending=False)
+
+    return feature_importance
+
+def plot_feature_importance(feature_importance, title):
+    """Plot a bar chart of the top 5 most important features."""
+    top_features = feature_importance.head(5)  # Selecionar as top 5 características mais importantes
+
+    plt.figure(figsize=(12, 8))
+    sns.barplot(x='importance', y='feature', data=top_features, palette='viridis')
+
+    plt.xlabel('Importância', fontsize=14)
+    plt.ylabel('Características', fontsize=14)
+    plt.title(title, fontsize=16)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    
+    # Adicionar rótulos de valor nas barras
+    for index, value in enumerate(top_features['importance']):
+        plt.text(value, index, f'{value:.2f}', va='center', ha='right', fontsize=12, color='black')
+
+    plt.gca().invert_yaxis()  # Inverter o eixo y para mostrar a característica mais importante no topo
+    plt.show()
+
 def main():
     file_path = 'movies2.csv'
 
@@ -151,8 +245,14 @@ def main():
     print("Analyzing graph (filtered by rating and revenue)...")
     measure_execution_time(analyze_graph, G_filtered)
 
+    print("Clustering graph...")
+    partition = measure_execution_time(cluster_graph, G_filtered)
+
+    print("Analyzing communities...")
+    analyze_communities(df_filtered, partition)
+
     print("Visualizing graph (filtered by rating and revenue)...")
-    measure_execution_time(visualize_graph, G_filtered, "Graph Filtered by Rating and Revenue", k=0.5)
+    measure_execution_time(visualize_graph, G_filtered, "Graph Filtered by Rating and Revenue", partition, k=0.5)
 
     # Analisar centralidade
     print("Analyzing centrality (degree)...")
@@ -173,6 +273,16 @@ def main():
 
     # Plotar tabela com informações importantes
     plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes)
+
+    # Analisar importância das características para receita
+    print("Analyzing feature importance for revenue...")
+    revenue_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='gross_earn')
+    plot_feature_importance(revenue_importance, 'Top 5 Características para Receita do Filme')
+
+    # Analisar importância das características para nota
+    print("Analyzing feature importance for rating...")
+    rating_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='rating')
+    plot_feature_importance(rating_importance, 'Top 5 Características para Nota do Filme')
 
 if __name__ == "__main__":
     main()
