@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd 
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,40 +12,46 @@ import seaborn as sns
 
 def load_data(file_path):
     """Load movie dataset from CSV."""
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, delimiter=';')
     return df
 
 def preprocess_data(df, rating_threshold, revenue_threshold):
     """Filter dataset and preprocess."""
     scaler = MinMaxScaler()
 
-    # Processar receita para valores numéricos
-    df['gross_earn'] = (
-        df['gross_earn']
-        .str.replace('[\$,]', '', regex=True)
-        .str.replace('M', 'e6', regex=False)
-        .str.replace('K', 'e3', regex=False)
-        .astype(float)
-    )
+    # Substituir vírgulas por pontos e converter colunas numéricas para float
+    df['Revenue (Millions)'] = df['Revenue (Millions)'].str.replace(',', '.').astype(float)
+    df['Rating'] = df['Rating'].str.replace(',', '.').astype(float)
+    if 'Budget (Millions)' in df.columns:
+        df['Budget (Millions)'] = df['Budget (Millions)'].str.replace(',', '.').astype(float)
+    else:
+        df['Budget (Millions)'] = 0.0  # Adicionar coluna com valor padrão se não existir
+
+    # Converter colunas numéricas para float
+    df['Runtime (Minutes)'] = df['Runtime (Minutes)'].replace({'N/A': None, 'Unknown': None}).astype(float)
 
     # Aplicar filtros baseados em nota e receita
-    df = df[(df['rating'] >= rating_threshold) & (df['gross_earn'] >= revenue_threshold)]
+    df = df[(df['Rating'] >= rating_threshold) & (df['Revenue (Millions)'] >= revenue_threshold)]
 
     # Tratar valores faltantes
-    df['runtime'] = df['runtime'].replace({'N/A': None, 'Unknown': None})
-    df['runtime'] = df['runtime'].str.extract(r'(\d+)').astype(float)
-    df['runtime'] = df['runtime'].fillna(df['runtime'].median())
-    df['gross_earn'] = df['gross_earn'].fillna(df['gross_earn'].median())
-    df['genre'] = df['genre'].fillna("Unknown")
+    df['Runtime (Minutes)'] = df['Runtime (Minutes)'].fillna(df['Runtime (Minutes)'].median())
+    df['Revenue (Millions)'] = df['Revenue (Millions)'].fillna(df['Revenue (Millions)'].median())
+    df['Budget (Millions)'] = df['Budget (Millions)'].fillna(df['Budget (Millions)'].median())
 
     # Normalizar colunas numéricas
-    df[['rating', 'runtime', 'gross_earn']] = scaler.fit_transform(df[['rating', 'runtime', 'gross_earn']])
+    df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']] = scaler.fit_transform(df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']])
 
     # Codificar gêneros
-    genre_encoded = pd.get_dummies(df['genre'], prefix='genre')
+    genre_encoded = pd.get_dummies(df['Genre'], prefix='genre')
     df = pd.concat([df, genre_encoded], axis=1)
 
-    return df
+    return df, scaler
+
+def denormalize_data(df, scaler, feature_cols):
+    """Denormalize the data using the original scaler."""
+    df_denormalized = df.copy()
+    df_denormalized[feature_cols] = scaler.inverse_transform(df[feature_cols])
+    return df_denormalized
 
 def create_graph(df, similarity_threshold=0.3):
     """Create a graph where movies are nodes and edges represent similarity."""
@@ -53,10 +59,10 @@ def create_graph(df, similarity_threshold=0.3):
 
     # Add nodes
     for index, row in df.iterrows():
-        G.add_node(row['title'], rating=row['rating'])
+        G.add_node(row['Title'], rating=row['Rating'])
 
     # Calculate similarity
-    feature_cols = ['rating', 'runtime', 'gross_earn'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
     feature_matrix = df[feature_cols].values
 
     similarity_matrix = cosine_similarity(feature_matrix)
@@ -65,7 +71,7 @@ def create_graph(df, similarity_threshold=0.3):
     for i in range(len(similarity_matrix)):
         for j in range(i + 1, len(similarity_matrix)):
             if similarity_matrix[i, j] > similarity_threshold:
-                G.add_edge(df.iloc[i]['title'], df.iloc[j]['title'], weight=similarity_matrix[i, j])
+                G.add_edge(df.iloc[i]['Title'], df.iloc[j]['Title'], weight=similarity_matrix[i, j])
 
     return G
 
@@ -119,7 +125,7 @@ def visualize_graph(G, title, partition, k=0.4):
     plt.show()
 
 def measure_execution_time(func, *args, **kwargs):
-    """Measure the execution time of a function."""
+    """Measure the execution time of a function.""" 
     start_time = time.time()
     result = func(*args, **kwargs)
     end_time = time.time()
@@ -128,7 +134,7 @@ def measure_execution_time(func, *args, **kwargs):
 
 
 def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes):
-    """Plot a table with important graph information."""
+    """Plot a table with important graph information.""" 
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.axis('tight')
     ax.axis('off')
@@ -139,7 +145,7 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
         ["Número de Arestas", num_edges],
         ["Top 3 Filmes por Grau de Centralidade", ", ".join([node for node, _ in top_degree_nodes])],
         ["Top 3 Filmes por Centralidade de Proximidade", ", ".join([node for node, _ in top_closeness_nodes])],
-        ["Top 3 Filmes por Centralidade de Intermediação", ", ".join([node for node, _ in top_betweenness_nodes])]
+        ["Top 3 Filmes por Centralidade de Intermediação", ", ".join([node for node, _ in top_betweenness_nodes])],
     ]
 
     # Criar tabela
@@ -152,7 +158,7 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.show()
 
 def cluster_graph(G):
-    """Cluster the graph using the greedy modularity method."""
+    """Cluster the graph using the greedy modularity method.""" 
     communities = list(nx.algorithms.community.greedy_modularity_communities(G))
     partition = {}
     for i, community in enumerate(communities):
@@ -161,7 +167,7 @@ def cluster_graph(G):
     return partition
 
 def analyze_communities(df, partition):
-    """Analyze and print information about each community."""
+    """Analyze and print information about each community.""" 
     communities = {}
     for node, community in partition.items():
         if community not in communities:
@@ -175,7 +181,7 @@ def analyze_communities(df, partition):
         print()
 
 def analyze_shared_features(df, G):
-    """Analyze shared features between connected movies."""
+    """Analyze shared features between connected movies.""" 
     shared_features = {}
     for edge in G.edges(data=True):
         movie1, movie2, data = edge
@@ -191,7 +197,7 @@ def analyze_shared_features(df, G):
 def feature_importance_analysis(df, target):
     """Train a model and calculate feature importance for a given target."""
     # Selecionar features e target
-    feature_cols = ['runtime'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_cols = ['Runtime (Minutes)', 'Budget (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
     X = df[feature_cols]
     y = df[target]
 
@@ -210,7 +216,7 @@ def feature_importance_analysis(df, target):
     return feature_importance
 
 def plot_feature_importance(feature_importance, title):
-    """Plot a bar chart of the top 5 most important features."""
+    """Plot a bar chart of the top 5 most important features.""" 
     top_features = feature_importance.head(5)  # Selecionar as top 5 características mais importantes
 
     plt.figure(figsize=(12, 8))
@@ -229,15 +235,49 @@ def plot_feature_importance(feature_importance, title):
     plt.gca().invert_yaxis()  # Inverter o eixo y para mostrar a característica mais importante no topo
     plt.show()
 
+def calculate_statistics(df):
+    """Calculate descriptive statistics for the most successful movies."""
+    statistics = {
+        'runtime_mean': df['Runtime (Minutes)'].mean(),
+        'runtime_median': df['Runtime (Minutes)'].median(),
+        'runtime_std': df['Runtime (Minutes)'].std(),
+        'revenue_mean': df['Revenue (Millions)'].mean(),  # Já está em milhões
+        'revenue_median': df['Revenue (Millions)'].median(),  # Já está em milhões
+        'revenue_std': df['Revenue (Millions)'].std(),  # Já está em milhões
+        'budget_mean': df['Budget (Millions)'].mean(),  # Já está em milhões
+        'budget_median': df['Budget (Millions)'].median(),  # Já está em milhões
+        'budget_std': df['Budget (Millions)'].std(),  # Já está em milhões
+        'rating_mean': df['Rating'].mean(),
+        'rating_median': df['Rating'].median(),
+        'rating_std': df['Rating'].std()
+    }
+    return statistics
+
+def display_statistics(statistics):
+    """Display descriptive statistics for the most successful movies."""
+    print("Estatísticas Descritivas para os Filmes de Maior Sucesso:")
+    print(f"Tempo Médio de Duração: {statistics['runtime_mean']:.2f} minutos")
+    print(f"Mediana da Duração: {statistics['runtime_median']:.2f} minutos")
+    print(f"Desvio Padrão da Duração: {statistics['runtime_std']:.2f} minutos")
+    print(f"Receita Média: ${statistics['revenue_mean']:.2f}M")
+    print(f"Mediana da Receita: ${statistics['revenue_median']:.2f}M")
+    print(f"Desvio Padrão da Receita: ${statistics['revenue_std']:.2f}M")
+    print(f"Orçamento Médio: ${statistics['budget_mean']:.2f}M")
+    print(f"Mediana do Orçamento: ${statistics['budget_median']:.2f}M")
+    print(f"Desvio Padrão do Orçamento: ${statistics['budget_std']:.2f}M")
+    print(f"Nota Média: {statistics['rating_mean']:.2f}")
+    print(f"Mediana da Nota: {statistics['rating_median']:.2f}")
+    print(f"Desvio Padrão da Nota: {statistics['rating_std']:.2f}")
+
 def main():
-    file_path = 'movies2.csv'
+    file_path = 'filmes.csv'
 
     print("Loading dataset...")
     df = measure_execution_time(load_data, file_path)
 
     # Aplicar filtros por nota e receita
     print("Preprocessing data (filtered by rating and revenue)...")
-    df_filtered = measure_execution_time(preprocess_data, df.copy(), 7.3, 1e8)
+    df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 7.3, 50)  # Ajuste os limiares conforme necessário
 
     print("Creating graph (filtered by rating and revenue)...")
     G_filtered = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
@@ -276,13 +316,22 @@ def main():
 
     # Analisar importância das características para receita
     print("Analyzing feature importance for revenue...")
-    revenue_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='gross_earn')
+    revenue_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='Revenue (Millions)')
     plot_feature_importance(revenue_importance, 'Top 5 Características para Receita do Filme')
 
     # Analisar importância das características para nota
     print("Analyzing feature importance for rating...")
-    rating_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='rating')
+    rating_importance = measure_execution_time(feature_importance_analysis, df_filtered, target='Rating')
     plot_feature_importance(rating_importance, 'Top 5 Características para Nota do Filme')
+
+    # Desnormalizar os dados filtrados antes de calcular as estatísticas
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']
+    df_denormalized = denormalize_data(df_filtered, scaler, feature_cols)
+
+    # Calcular e exibir estatísticas descritivas
+    print("Calculating statistics for the most successful movies...")
+    statistics = calculate_statistics(df_denormalized)
+    display_statistics(statistics)
 
 if __name__ == "__main__":
     main()
