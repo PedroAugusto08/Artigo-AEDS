@@ -11,21 +11,21 @@ from sklearn.model_selection import train_test_split
 import seaborn as sns
 
 def load_data(file_path):
-    """Load movie dataset from CSV."""
+    """Load movie dataset from CSV.""" 
     df = pd.read_csv(file_path, delimiter=';')
     return df
 
 def preprocess_data(df, rating_threshold, revenue_threshold):
-    """Filter dataset and preprocess."""
+    """Filter dataset and preprocess.""" 
     scaler = MinMaxScaler()
 
     # Substituir vírgulas por pontos e converter colunas numéricas para float
     df['Revenue (Millions)'] = df['Revenue (Millions)'].str.replace(',', '.').astype(float)
     df['Rating'] = df['Rating'].str.replace(',', '.').astype(float)
-    if 'Budget ($million)' in df.columns:
-        df['Budget ($million)'] = df['Budget ($million)'].astype(str).str.replace(',', '.').str.extract(r'(\d+\.?\d*)').astype(float)
+    if 'Budget (Million)' in df.columns:
+        df['Budget (Million)'] = df['Budget (Million)'].astype(str).str.replace(',', '.').str.extract(r'(\d+\.?\d*)').astype(float)
     else:
-        df['Budget ($million)'] = np.nan  # Adiciona a coluna como NaN caso não exista
+        df['Budget (Million)'] = np.nan  # Adiciona a coluna como NaN caso não exista
 
 
     # Converter colunas numéricas para float
@@ -37,10 +37,10 @@ def preprocess_data(df, rating_threshold, revenue_threshold):
     # Tratar valores faltantes
     df['Runtime (Minutes)'] = df['Runtime (Minutes)'].fillna(df['Runtime (Minutes)'].median())
     df['Revenue (Millions)'] = df['Revenue (Millions)'].fillna(df['Revenue (Millions)'].median())
-    df['Budget ($million)'] = df['Budget ($million)'].fillna(df['Budget ($million)'].median())
+    df['Budget (Million)'] = df['Budget (Million)'].fillna(df['Budget (Million)'].median())
 
     # Normalizar colunas numéricas
-    df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']] = scaler.fit_transform(df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']])
+    df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)']] = scaler.fit_transform(df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)']])
 
     # Codificar gêneros
     genre_encoded = pd.get_dummies(df['Genre'], prefix='genre')
@@ -49,13 +49,13 @@ def preprocess_data(df, rating_threshold, revenue_threshold):
     return df, scaler
 
 def denormalize_data(df, scaler, feature_cols):
-    """Denormalize the data using the original scaler."""
+    """Denormalize the data using the original scaler.""" 
     df_denormalized = df.copy()
     df_denormalized[feature_cols] = scaler.inverse_transform(df[feature_cols])
     return df_denormalized
 
 def create_graph(df, similarity_threshold=0.3):
-    """Create a graph where movies are nodes and edges represent similarity."""
+    """Create a graph where movies are nodes and edges represent similarity.""" 
     G = nx.Graph()
 
     # Add nodes
@@ -77,7 +77,7 @@ def create_graph(df, similarity_threshold=0.3):
     return G
 
 def analyze_graph(G):
-    """Perform basic graph analysis."""
+    """Perform basic graph analysis.""" 
     print("Number of nodes:", G.number_of_nodes())
     print("Number of edges:", G.number_of_edges())
 
@@ -102,7 +102,7 @@ def analyze_centrality(G, metric='degree'):
     return top_central_nodes
 
 def visualize_graph(G, title, partition, k=0.4):
-    """Visualize the graph using NetworkX and Matplotlib."""
+    """Visualize the graph using NetworkX and Matplotlib.""" 
     pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
 
@@ -196,9 +196,9 @@ def analyze_shared_features(df, G):
     return shared_features
 
 def feature_importance_analysis(df, target):
-    """Train a model and calculate feature importance for a given target."""
+    """Train a model and calculate feature importance for a given target.""" 
     # Selecionar features e target
-    feature_cols = ['Runtime (Minutes)', 'Budget ($million)'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_cols = ['Runtime (Minutes)', 'Budget (Million)'] + [col for col in df.columns if col.startswith('genre_')]
     X = df[feature_cols]
     y = df[target]
 
@@ -237,7 +237,7 @@ def plot_feature_importance(feature_importance, title):
     plt.show()
 
 def calculate_statistics(df):
-    """Calculate descriptive statistics for the most successful movies."""
+    """Calculate descriptive statistics for the most successful movies.""" 
     statistics = {
         'runtime_mean': df['Runtime (Minutes)'].mean(),
         'runtime_median': df['Runtime (Minutes)'].median(),
@@ -245,30 +245,44 @@ def calculate_statistics(df):
         'revenue_mean': df['Revenue (Millions)'].mean(),  # Já está em milhões
         'revenue_median': df['Revenue (Millions)'].median(),  # Já está em milhões
         'revenue_std': df['Revenue (Millions)'].std(),  # Já está em milhões
-        'budget_mean': df['Budget ($million)'].mean(),  # Já está em milhões
-        'budget_median': df['Budget ($million)'].median(),  # Já está em milhões
-        'budget_std': df['Budget ($million)'].std(),  # Já está em milhões
+        'budget_mean': df['Budget (Million)'].mean(),  # Já está em milhões
+        'budget_median': df['Budget (Million)'].median(),  # Já está em milhões
+        'budget_std': df['Budget (Million)'].std(),  # Já está em milhões
         'rating_mean': df['Rating'].mean(),
         'rating_median': df['Rating'].median(),
         'rating_std': df['Rating'].std()
     }
     return statistics
 
+
 def display_statistics(statistics):
-    """Display descriptive statistics for the most successful movies."""
-    print("Estatísticas Descritivas para os Filmes de Maior Sucesso:")
-    print(f"Tempo Médio de Duração: {statistics['runtime_mean']:.2f} minutos")
-    print(f"Mediana da Duração: {statistics['runtime_median']:.2f} minutos")
-    print(f"Desvio Padrão da Duração: {statistics['runtime_std']:.2f} minutos")
-    print(f"Receita Média: ${statistics['revenue_mean']:.2f}M")
-    print(f"Mediana da Receita: ${statistics['revenue_median']:.2f}M")
-    print(f"Desvio Padrão da Receita: ${statistics['revenue_std']:.2f}M")
-    print(f"Orçamento Médio: ${statistics['budget_mean']:.2f}M")
-    print(f"Mediana do Orçamento: ${statistics['budget_median']:.2f}M")
-    print(f"Desvio Padrão do Orçamento: ${statistics['budget_std']:.2f}M")
-    print(f"Nota Média: {statistics['rating_mean']:.2f}")
-    print(f"Mediana da Nota: {statistics['rating_median']:.2f}")
-    print(f"Desvio Padrão da Nota: {statistics['rating_std']:.2f}")
+    """Display descriptive statistics for the most successful movies in a table.""" 
+    data = [
+        ["Tempo Médio de Duração", f"{statistics['runtime_mean']:.2f} minutos"],
+        ["Mediana da Duração", f"{statistics['runtime_median']:.2f} minutos"],
+        ["Desvio Padrão da Duração", f"{statistics['runtime_std']:.2f} minutos"],
+        ["Receita Média", f"${statistics['revenue_mean']:.2f}M"],
+        ["Mediana da Receita", f"${statistics['revenue_median']:.2f}M"],
+        ["Desvio Padrão da Receita", f"${statistics['revenue_std']:.2f}M"],
+        ["Orçamento Médio", f"${statistics['budget_mean']:.2f}M"],
+        ["Mediana do Orçamento", f"${statistics['budget_median']:.2f}M"],
+        ["Desvio Padrão do Orçamento", f"${statistics['budget_std']:.2f}M"],
+        ["Nota Média", f"{statistics['rating_mean']:.2f}"],
+        ["Mediana da Nota", f"{statistics['rating_median']:.2f}"],
+        ["Desvio Padrão da Nota", f"{statistics['rating_std']:.2f}"]
+    ]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.axis('tight')
+    ax.axis('off')
+
+    table = ax.table(cellText=data, colLabels=["Métrica", "Valor"], cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.2)
+
+    plt.title("Estatísticas Descritivas para os Filmes de Maior Sucesso")
+    plt.show()
 
 def main():
     file_path = 'filmes.csv'
@@ -326,7 +340,7 @@ def main():
     plot_feature_importance(rating_importance, 'Top 5 Características para Nota do Filme')
 
     # Desnormalizar os dados filtrados antes de calcular as estatísticas
-    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)']
     df_denormalized = denormalize_data(df_filtered, scaler, feature_cols)
 
     # Calcular e exibir estatísticas descritivas
