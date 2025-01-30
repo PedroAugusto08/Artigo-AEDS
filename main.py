@@ -284,6 +284,34 @@ def display_statistics(statistics):
     plt.title("Estatísticas Descritivas para os Filmes de Maior Sucesso")
     plt.show()
 
+def find_most_successful_movie(df):
+    """Find the most successful movie based on revenue."""
+    most_successful_movie = df.loc[df['Revenue (Millions)'].idxmax()]
+    return most_successful_movie
+
+def find_connected_movies(G, movie_title):
+    """Find movies connected to the given movie title in the graph."""
+    connected_movies = list(G.neighbors(movie_title))
+    return connected_movies
+
+def analyze_connection_factors(df, movie_title, connected_movies):
+    """Analyze the factors that connect the given movie to its connected movies."""
+    factors = []
+    movie_data = df[df['Title'] == movie_title].iloc[0]
+    
+    for connected_movie in connected_movies:
+        connected_movie_data = df[df['Title'] == connected_movie].iloc[0]
+        similarity = cosine_similarity([movie_data[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)']]], 
+                                       [connected_movie_data[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)']]])[0][0]
+        shared_genres = list(set(movie_data.filter(like='genre_').index) & set(connected_movie_data.filter(like='genre_').index))
+        factors.append({
+            'connected_movie': connected_movie,
+            'similarity': similarity,
+            'shared_genres': shared_genres
+        })
+    
+    return factors
+
 def main():
     file_path = 'filmes.csv'
 
@@ -347,6 +375,22 @@ def main():
     print("Calculating statistics for the most successful movies...")
     statistics = calculate_statistics(df_denormalized)
     display_statistics(statistics)
+
+    # Encontrar o filme de maior sucesso
+    print("Finding the most successful movie...")
+    most_successful_movie = find_most_successful_movie(df_denormalized)
+    print(f"Most successful movie: {most_successful_movie['Title']} with revenue ${most_successful_movie['Revenue (Millions)']}M")
+
+    # Encontrar filmes conectados ao filme de maior sucesso
+    print("Finding movies connected to the most successful movie...")
+    connected_movies = find_connected_movies(G_filtered, most_successful_movie['Title'])
+    print(f"Movies connected to {most_successful_movie['Title']}: {connected_movies}")
+
+    # Analisar fatores de conexão
+    print("Analyzing connection factors...")
+    connection_factors = analyze_connection_factors(df_denormalized, most_successful_movie['Title'], connected_movies)
+    for factor in connection_factors:
+        print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
 
 if __name__ == "__main__":
     main()
