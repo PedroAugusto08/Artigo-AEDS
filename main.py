@@ -22,10 +22,11 @@ def preprocess_data(df, rating_threshold, revenue_threshold):
     # Substituir vírgulas por pontos e converter colunas numéricas para float
     df['Revenue (Millions)'] = df['Revenue (Millions)'].str.replace(',', '.').astype(float)
     df['Rating'] = df['Rating'].str.replace(',', '.').astype(float)
-    if 'Budget (Millions)' in df.columns:
-        df['Budget (Millions)'] = df['Budget (Millions)'].str.replace(',', '.').astype(float)
+    if 'Budget ($million)' in df.columns:
+        df['Budget ($million)'] = df['Budget ($million)'].astype(str).str.replace(',', '.').str.extract(r'(\d+\.?\d*)').astype(float)
     else:
-        df['Budget (Millions)'] = 0.0  # Adicionar coluna com valor padrão se não existir
+        df['Budget ($million)'] = np.nan  # Adiciona a coluna como NaN caso não exista
+
 
     # Converter colunas numéricas para float
     df['Runtime (Minutes)'] = df['Runtime (Minutes)'].replace({'N/A': None, 'Unknown': None}).astype(float)
@@ -36,10 +37,10 @@ def preprocess_data(df, rating_threshold, revenue_threshold):
     # Tratar valores faltantes
     df['Runtime (Minutes)'] = df['Runtime (Minutes)'].fillna(df['Runtime (Minutes)'].median())
     df['Revenue (Millions)'] = df['Revenue (Millions)'].fillna(df['Revenue (Millions)'].median())
-    df['Budget (Millions)'] = df['Budget (Millions)'].fillna(df['Budget (Millions)'].median())
+    df['Budget ($million)'] = df['Budget ($million)'].fillna(df['Budget ($million)'].median())
 
     # Normalizar colunas numéricas
-    df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']] = scaler.fit_transform(df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']])
+    df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']] = scaler.fit_transform(df[['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']])
 
     # Codificar gêneros
     genre_encoded = pd.get_dummies(df['Genre'], prefix='genre')
@@ -86,7 +87,7 @@ def analyze_graph(G):
     print("Top 5 central nodes:", top_central_nodes)
 
 def analyze_centrality(G, metric='degree'):
-    """Analyze centrality of the graph based on the specified metric."""
+    """Analyze centrality of the graph based on the specified metric.""" 
     if metric == 'degree':
         centrality = nx.degree_centrality(G)
     elif metric == 'closeness':
@@ -197,7 +198,7 @@ def analyze_shared_features(df, G):
 def feature_importance_analysis(df, target):
     """Train a model and calculate feature importance for a given target."""
     # Selecionar features e target
-    feature_cols = ['Runtime (Minutes)', 'Budget (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_cols = ['Runtime (Minutes)', 'Budget ($million)'] + [col for col in df.columns if col.startswith('genre_')]
     X = df[feature_cols]
     y = df[target]
 
@@ -244,9 +245,9 @@ def calculate_statistics(df):
         'revenue_mean': df['Revenue (Millions)'].mean(),  # Já está em milhões
         'revenue_median': df['Revenue (Millions)'].median(),  # Já está em milhões
         'revenue_std': df['Revenue (Millions)'].std(),  # Já está em milhões
-        'budget_mean': df['Budget (Millions)'].mean(),  # Já está em milhões
-        'budget_median': df['Budget (Millions)'].median(),  # Já está em milhões
-        'budget_std': df['Budget (Millions)'].std(),  # Já está em milhões
+        'budget_mean': df['Budget ($million)'].mean(),  # Já está em milhões
+        'budget_median': df['Budget ($million)'].median(),  # Já está em milhões
+        'budget_std': df['Budget ($million)'].std(),  # Já está em milhões
         'rating_mean': df['Rating'].mean(),
         'rating_median': df['Rating'].median(),
         'rating_std': df['Rating'].std()
@@ -325,7 +326,7 @@ def main():
     plot_feature_importance(rating_importance, 'Top 5 Características para Nota do Filme')
 
     # Desnormalizar os dados filtrados antes de calcular as estatísticas
-    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Millions)']
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget ($million)']
     df_denormalized = denormalize_data(df_filtered, scaler, feature_cols)
 
     # Calcular e exibir estatísticas descritivas
