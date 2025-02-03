@@ -88,11 +88,11 @@ def analyze_graph(G):
 
 def analyze_centrality(G, metric='degree'):
     """Analyze centrality of the graph based on the specified metric.""" 
-    if metric == 'degree':
+    if (metric == 'degree'):
         centrality = nx.degree_centrality(G)
-    elif metric == 'closeness':
+    elif (metric == 'closeness'):
         centrality = nx.closeness_centrality(G)
-    elif metric == 'betweenness':
+    elif (metric == 'betweenness'):
         centrality = nx.betweenness_centrality(G)
     else:
         raise ValueError("Métrica não reconhecida.")
@@ -159,19 +159,15 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.show()
 
 def cluster_graph(G):
-    """Cluster the graph using the greedy modularity method.""" 
-    communities = list(nx.algorithms.community.greedy_modularity_communities(G))
-    partition = {}
-    for i, community in enumerate(communities):
-        for node in community:
-            partition[node] = i
+    """Cluster the graph using the Louvain method."""
+    partition = community_louvain.best_partition(G)
     return partition
 
 def analyze_communities(df, partition):
     """Analyze and print information about each community.""" 
     communities = {}
     for node, community in partition.items():
-        if community not in communities:
+        if (community not in communities):
             communities[community] = []
         communities[community].append(node)
     
@@ -348,6 +344,74 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
     for factor in connection_factors:
         print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
 
+def calculate_mst(G):
+    """Calculate the Minimum Spanning Tree (MST) of the graph.""" 
+    mst = nx.minimum_spanning_tree(G)
+    return mst
+
+def visualize_mst(G, mst, title):
+    """Visualize the Minimum Spanning Tree (MST) using NetworkX and Matplotlib."""
+    pos = nx.spring_layout(G, k=0.5, iterations=20)
+    plt.figure(figsize=(12, 8))
+
+    # Desenhar todos os nós e arestas do grafo original
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color='gray', alpha=0.6)
+    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
+
+    # Desenhar os nós e arestas da MST
+    nx.draw_networkx_nodes(mst, pos, node_size=50, node_color='red', alpha=0.6)
+    nx.draw_networkx_edges(mst, pos, alpha=0.6, width=2, edge_color='blue')
+
+    labels = {node: node for node in mst.nodes}
+    nx.draw_networkx_labels(mst, pos, labels, font_size=8, font_color='black')
+    plt.title(title)
+    plt.axis('off')
+
+    # Adicionar legenda
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='Grafo Original'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Nós da MST'),
+        plt.Line2D([0], [0], color='blue', lw=2, label='Arestas da MST')
+    ]
+    plt.legend(handles=legend_elements, loc='best', title='Legenda')
+
+    plt.show()
+
+def add_missing_connections(G, df, similarity_threshold=0.1):
+    """Add connections for movies that have no connections."""
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_matrix = df[feature_cols].values
+    similarity_matrix = cosine_similarity(feature_matrix)
+
+    for node in G.nodes:
+        if G.degree(node) == 0:
+            # Encontrar o filme mais similar que não seja ele mesmo
+            node_index = df[df['Title'] == node].index[0]
+            similarities = similarity_matrix[node_index]
+            sorted_indices = similarities.argsort()[::-1]  # Ordenar índices pela similaridade em ordem decrescente
+
+            # Encontrar o filme mais similar que não seja ele mesmo e esteja dentro dos limites
+            most_similar_index = None
+            for idx in sorted_indices:
+                if idx != node_index and idx < len(df):
+                    most_similar_index = idx
+                    break
+
+            if most_similar_index is not None:
+                most_similar_movie = df.iloc[most_similar_index]['Title']
+                similarity_score = similarities[most_similar_index]
+
+                # Adicionar conexão se a similaridade for maior que o limiar
+                if similarity_score > similarity_threshold:
+                    G.add_edge(node, most_similar_movie, weight=similarity_score)
+    return G
+
+def remove_nodes_without_connections(G):
+    """Remove nodes that have no connections from the graph."""
+    nodes_to_remove = [node for node in G.nodes if G.degree(node) == 0]
+    G.remove_nodes_from(nodes_to_remove)
+    return G
+
 def main():
     file_path = 'filmes.csv'
 
@@ -360,6 +424,10 @@ def main():
 
     print("Creating graph (filtered by rating and revenue)...")
     G_filtered = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
+
+    # Remover nós sem conexões
+    print("Removing nodes without connections...")
+    G_filtered = remove_nodes_without_connections(G_filtered)
 
     print("Analyzing graph (filtered by rating and revenue)...")
     measure_execution_time(analyze_graph, G_filtered)
@@ -430,6 +498,11 @@ def main():
 
     # Plotar o filme de maior sucesso e os filmes conectados a ele
     plot_successful_movie_connections(G_filtered, df_denormalized, most_successful_movie['Title'], connected_movies, connection_factors)
+
+    # Calcular e visualizar a MST
+    print("Calculating and visualizing the Minimum Spanning Tree (MST)...")
+    mst = calculate_mst(G_filtered)
+    visualize_mst(G_filtered, mst, "Minimum Spanning Tree (MST)")
 
 if __name__ == "__main__":
     main()
