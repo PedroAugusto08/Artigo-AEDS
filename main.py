@@ -312,6 +312,42 @@ def analyze_connection_factors(df, movie_title, connected_movies):
     
     return factors
 
+def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors):
+    """Plot the most successful movie and its connected movies, and analyze the connection factors."""
+    pos = nx.spring_layout(G, k=0.5, iterations=20)
+    plt.figure(figsize=(12, 8))
+
+    # Colorir nós
+    node_colors = []
+    for node in G.nodes:
+        if node == movie_title:
+            node_colors.append('red')  # Filme de maior sucesso em vermelho
+        elif node in connected_movies:
+            node_colors.append('blue')  # Filmes conectados em azul
+        else:
+            node_colors.append('gray')  # Outros filmes em cinza
+
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color=node_colors, alpha=0.6)
+    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
+    labels = {node: node for node in G.nodes if node == movie_title or node in connected_movies}
+    nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
+    plt.title(f"Filme de Maior Sucesso e Filmes Conectados: {movie_title}")
+    plt.axis('off')
+
+    # Adicionar legenda
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Filme de Maior Sucesso'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', markersize=10, label='Filmes Conectados'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='Outros Filmes')
+    ]
+    plt.legend(handles=legend_elements, loc='best', title='Legenda')
+
+    plt.show()
+
+    # Analisar fatores de conexão
+    for factor in connection_factors:
+        print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
+
 def main():
     file_path = 'filmes.csv'
 
@@ -391,6 +427,9 @@ def main():
     connection_factors = analyze_connection_factors(df_denormalized, most_successful_movie['Title'], connected_movies)
     for factor in connection_factors:
         print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
+
+    # Plotar o filme de maior sucesso e os filmes conectados a ele
+    plot_successful_movie_connections(G_filtered, df_denormalized, most_successful_movie['Title'], connected_movies, connection_factors)
 
 if __name__ == "__main__":
     main()
