@@ -101,7 +101,7 @@ def analyze_centrality(G, metric='degree'):
     top_central_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:3]
     return top_central_nodes
 
-def visualize_graph(G, title, partition, k=0.4):
+def visualize_graph(G, title, partition, k=0.6):
     """Visualize the graph using NetworkX and Matplotlib.""" 
     pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
@@ -111,7 +111,11 @@ def visualize_graph(G, title, partition, k=0.4):
     communities = set(partition.values())
     colors = [cmap(partition[node] / len(communities)) for node in G.nodes]
 
-    nx.draw_networkx_nodes(G, pos, node_size=50, node_color=colors, alpha=0.6)
+    # Ajustar o tamanho dos nós com base no grau
+    degrees = dict(G.degree())
+    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
+
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=colors, alpha=0.6)
     nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
     labels = {node: node for node in G.nodes}  # Exibe todos os rótulos
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
@@ -159,7 +163,7 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.show()
 
 def cluster_graph(G):
-    """Cluster the graph using the Louvain method."""
+    """Cluster the graph using the Louvain method.""" 
     partition = community_louvain.best_partition(G)
     return partition
 
@@ -281,17 +285,17 @@ def display_statistics(statistics):
     plt.show()
 
 def find_most_successful_movie(df):
-    """Find the most successful movie based on revenue."""
+    """Find the most successful movie based on revenue.""" 
     most_successful_movie = df.loc[df['Revenue (Millions)'].idxmax()]
     return most_successful_movie
 
 def find_connected_movies(G, movie_title):
-    """Find movies connected to the given movie title in the graph."""
+    """Find movies connected to the given movie title in the graph.""" 
     connected_movies = list(G.neighbors(movie_title))
     return connected_movies
 
 def analyze_connection_factors(df, movie_title, connected_movies):
-    """Analyze the factors that connect the given movie to its connected movies."""
+    """Analyze the factors that connect the given movie to its connected movies.""" 
     factors = []
     movie_data = df[df['Title'] == movie_title].iloc[0]
     
@@ -308,9 +312,9 @@ def analyze_connection_factors(df, movie_title, connected_movies):
     
     return factors
 
-def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors):
-    """Plot the most successful movie and its connected movies, and analyze the connection factors."""
-    pos = nx.spring_layout(G, k=0.5, iterations=20)
+def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=0.6):
+    """Plot the most successful movie and its connected movies, and analyze the connection factors.""" 
+    pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
 
     # Colorir nós
@@ -323,7 +327,11 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
         else:
             node_colors.append('gray')  # Outros filmes em cinza
 
-    nx.draw_networkx_nodes(G, pos, node_size=50, node_color=node_colors, alpha=0.6)
+    # Ajustar o tamanho dos nós com base no grau
+    degrees = dict(G.degree())
+    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
+
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=node_colors, alpha=0.6)
     nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
     labels = {node: node for node in G.nodes if node == movie_title or node in connected_movies}
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
@@ -349,17 +357,21 @@ def calculate_mst(G):
     mst = nx.minimum_spanning_tree(G)
     return mst
 
-def visualize_mst(G, mst, title):
+def visualize_mst(G, mst, title, k=0.6):
     """Visualize the Minimum Spanning Tree (MST) using NetworkX and Matplotlib."""
-    pos = nx.spring_layout(G, k=0.5, iterations=20)
+    pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
 
+    # Ajustar o tamanho dos nós com base no grau
+    degrees = dict(G.degree())
+    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
+
     # Desenhar todos os nós e arestas do grafo original
-    nx.draw_networkx_nodes(G, pos, node_size=50, node_color='gray', alpha=0.6)
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='gray', alpha=0.6)
     nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
 
     # Desenhar os nós e arestas da MST
-    nx.draw_networkx_nodes(mst, pos, node_size=50, node_color='red', alpha=0.6)
+    nx.draw_networkx_nodes(mst, pos, node_size=node_sizes, node_color='red', alpha=0.6)
     nx.draw_networkx_edges(mst, pos, alpha=0.6, width=2, edge_color='blue')
 
     labels = {node: node for node in mst.nodes}
@@ -378,7 +390,7 @@ def visualize_mst(G, mst, title):
     plt.show()
 
 def add_missing_connections(G, df, similarity_threshold=0.1):
-    """Add connections for movies that have no connections."""
+    """Add connections for movies that have no connections.""" 
     feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
     feature_matrix = df[feature_cols].values
     similarity_matrix = cosine_similarity(feature_matrix)
@@ -407,7 +419,7 @@ def add_missing_connections(G, df, similarity_threshold=0.1):
     return G
 
 def remove_nodes_without_connections(G):
-    """Remove nodes that have no connections from the graph."""
+    """Remove nodes that have no connections from the graph.""" 
     nodes_to_remove = [node for node in G.nodes if G.degree(node) == 0]
     G.remove_nodes_from(nodes_to_remove)
     return G
@@ -429,17 +441,35 @@ def main():
     print("Removing nodes without connections...")
     G_filtered = remove_nodes_without_connections(G_filtered)
 
-    print("Analyzing graph (filtered by rating and revenue)...")
-    measure_execution_time(analyze_graph, G_filtered)
-
     print("Clustering graph...")
     partition = measure_execution_time(cluster_graph, G_filtered)
 
-    print("Analyzing communities...")
-    analyze_communities(df_filtered, partition)
-
     print("Visualizing graph (filtered by rating and revenue)...")
-    measure_execution_time(visualize_graph, G_filtered, "Graph Filtered by Rating and Revenue", partition, k=0.5)
+    measure_execution_time(visualize_graph, G_filtered, "Graph Filtered by Rating and Revenue", partition, k=0.6)
+
+    # Encontrar o filme de maior sucesso
+    print("Finding the most successful movie...")
+    most_successful_movie = find_most_successful_movie(df_filtered)
+    print(f"Most successful movie: {most_successful_movie['Title']} with revenue ${most_successful_movie['Revenue (Millions)']}M")
+
+    # Encontrar filmes conectados ao filme de maior sucesso
+    print("Finding movies connected to the most successful movie...")
+    connected_movies = find_connected_movies(G_filtered, most_successful_movie['Title'])
+    print(f"Movies connected to {most_successful_movie['Title']}: {connected_movies}")
+
+    # Analisar fatores de conexão
+    print("Analyzing connection factors...")
+    connection_factors = analyze_connection_factors(df_filtered, most_successful_movie['Title'], connected_movies)
+    for factor in connection_factors:
+        print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
+
+    # Plotar o filme de maior sucesso e os filmes conectados a ele
+    plot_successful_movie_connections(G_filtered, df_filtered, most_successful_movie['Title'], connected_movies, connection_factors, k=0.6)
+
+    # Calcular e visualizar a MST
+    print("Calculating and visualizing the Minimum Spanning Tree (MST)...")
+    mst = calculate_mst(G_filtered)
+    visualize_mst(G_filtered, mst, "Minimum Spanning Tree (MST)", k=0.6)
 
     # Analisar centralidade
     print("Analyzing centrality (degree)...")
@@ -479,30 +509,6 @@ def main():
     print("Calculating statistics for the most successful movies...")
     statistics = calculate_statistics(df_denormalized)
     display_statistics(statistics)
-
-    # Encontrar o filme de maior sucesso
-    print("Finding the most successful movie...")
-    most_successful_movie = find_most_successful_movie(df_denormalized)
-    print(f"Most successful movie: {most_successful_movie['Title']} with revenue ${most_successful_movie['Revenue (Millions)']}M")
-
-    # Encontrar filmes conectados ao filme de maior sucesso
-    print("Finding movies connected to the most successful movie...")
-    connected_movies = find_connected_movies(G_filtered, most_successful_movie['Title'])
-    print(f"Movies connected to {most_successful_movie['Title']}: {connected_movies}")
-
-    # Analisar fatores de conexão
-    print("Analyzing connection factors...")
-    connection_factors = analyze_connection_factors(df_denormalized, most_successful_movie['Title'], connected_movies)
-    for factor in connection_factors:
-        print(f"Connected movie: {factor['connected_movie']}, Similarity: {factor['similarity']:.2f}, Shared genres: {factor['shared_genres']}")
-
-    # Plotar o filme de maior sucesso e os filmes conectados a ele
-    plot_successful_movie_connections(G_filtered, df_denormalized, most_successful_movie['Title'], connected_movies, connection_factors)
-
-    # Calcular e visualizar a MST
-    print("Calculating and visualizing the Minimum Spanning Tree (MST)...")
-    mst = calculate_mst(G_filtered)
-    visualize_mst(G_filtered, mst, "Minimum Spanning Tree (MST)")
 
 if __name__ == "__main__":
     main()
