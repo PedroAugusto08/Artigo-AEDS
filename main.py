@@ -56,44 +56,24 @@ def denormalize_data(df, scaler, feature_cols):
 def create_graph(df, similarity_threshold=0.3):
     """Create a graph where movies are nodes and edges represent similarity.""" 
     G = nx.Graph()
-    feature_importance = {
-        'genre': 0,
-        'director': 0,
-        'runtime': 0,
-        'budget': 0
-    }
 
     # Add nodes
     for index, row in df.iterrows():
         G.add_node(row['Title'], rating=row['Rating'])
 
-    # Criar arestas baseadas em cada característica individualmente
-    for i, row_i in df.iterrows():
-        for j, row_j in df.iterrows():
-            if i >= j:
-                continue
+    # Calcular a matriz de similaridade
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_matrix = df[feature_cols].values
+    similarity_matrix = cosine_similarity(feature_matrix)
 
-            # Conexão baseada no gênero
-            if row_i['Primary Genre'] == row_j['Primary Genre']:
-                G.add_edge(row_i['Title'], row_j['Title'], weight=1.0, color='blue')
-                feature_importance['genre'] += 1
+    # Criar arestas baseadas na similaridade
+    for i in range(len(df)):
+        for j in range(i + 1, len(df)):
+            similarity = similarity_matrix[i, j]
+            if similarity >= similarity_threshold:
+                G.add_edge(df.iloc[i]['Title'], df.iloc[j]['Title'], weight=similarity, color='blue')
 
-            # Conexão baseada no diretor
-            if row_i['Director'] == row_j['Director']:
-                G.add_edge(row_i['Title'], row_j['Title'], weight=1.0, color='green')
-                feature_importance['director'] += 1
-
-            # Conexão baseada no runtime
-            if abs(row_i['Runtime (Minutes)'] - row_j['Runtime (Minutes)']) < similarity_threshold:
-                G.add_edge(row_i['Title'], row_j['Title'], weight=1.0, color='purple')
-                feature_importance['runtime'] += 1
-
-            # Conexão baseada no budget
-            if abs(row_i['Budget (Million)'] - row_j['Budget (Million)']) < similarity_threshold:
-                G.add_edge(row_i['Title'], row_j['Title'], weight=1.0, color='orange')
-                feature_importance['budget'] += 1
-
-    return G, feature_importance
+    return G
 
 def analyze_graph(G):
     """Perform basic graph analysis.""" 
@@ -144,7 +124,7 @@ def visualize_graph(G, title, partition, k=0.8):
     # Desenhar rótulos
     labels = {node: node for node in G.nodes}  # Exibe todos os rótulos
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
-    plt.title(title)
+    plt.title(title, fontsize=16)
     plt.axis('off')
 
     # Adicionar legenda para os nós
@@ -209,14 +189,13 @@ def analyze_communities(df, partition):
 def analyze_shared_features(df, G):
     """Analyze shared features between connected movies.""" 
     shared_features = {}
-    for edge in G.edges(data=True):
-        movie1, movie2, data = edge
+    for movie1, movie2, data in G.edges(data=True):
         shared_features[(movie1, movie2)] = {
             'similarity': data['weight'],
-            'shared_genres': list(set(df[df['title'] == movie1].iloc[0].filter(like='genre_').index) & set(df[df['title'] == movie2].iloc[0].filter(like='genre_').index)),
-            'runtime_diff': abs(df[df['title'] == movie1]['runtime'].values[0] - df[df['title'] == movie2]['runtime'].values[0]),
-            'rating_diff': abs(df[df['title'] == movie1]['rating'].values[0] - df[df['title'] == movie2]['rating'].values[0]),
-            'gross_earn_diff': abs(df[df['title'] == movie1]['gross_earn'].values[0] - df[df['title'] == movie2]['gross_earn'].values[0])
+            'shared_genres': list(set(df[df['Title'] == movie1].iloc[0].filter(like='genre_').index) & set(df[df['Title'] == movie2].iloc[0].filter(like='genre_').index)),
+            'runtime_diff': abs(df[df['Title'] == movie1]['Runtime (Minutes)'].values[0] - df[df['Title'] == movie2]['Runtime (Minutes)'].values[0]),
+            'rating_diff': abs(df[df['Title'] == movie1]['Rating'].values[0] - df[df['Title'] == movie2]['Rating'].values[0]),
+            'revenue_diff': abs(df[df['Title'] == movie1]['Revenue (Millions)'].values[0] - df[df['Title'] == movie2]['Revenue (Millions)'].values[0])
         }
     return shared_features
 
@@ -245,18 +224,45 @@ def feature_importance_analysis(df, target):
 
     return feature_importance
 
+def feature_importance_analysis(df, target):
+    """Train a model and calculate feature importance for a given target.""" 
+    # Selecionar features e target
+    feature_cols = ['Runtime (Minutes)', 'Budget (Million)', 'Director'] + [col for col in df.columns if col.startswith('genre_')]
+    
+    # Codificar a coluna "Director"
+    df['Director'] = df['Director'].astype('category').cat.codes
+    
+    X = df[feature_cols]
+    y = df[target]
+
+    # Dividir os dados em treino e teste
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Treinar o modelo
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    # Calcular a importância das features
+    importances = model.feature_importances_
+    feature_importance = pd.DataFrame({'feature': feature_cols, 'importance': importances})
+    feature_importance = feature_importance.sort_values(by='importance', ascending=False)
+
+    return feature_importance
+
 def plot_feature_importance(feature_importance, title):
-    """Plot a bar chart of the importance of features based on the number of connections.""" 
-    feature_importance_df = pd.DataFrame(list(feature_importance.items()), columns=['feature', 'importance'])
+    """Plot a bar chart of the top 5 importance of features based on their importance score.""" 
+    feature_importance_df = pd.DataFrame(feature_importance)
+    feature_importance_df['importance'] = feature_importance_df['importance'].apply(lambda x: x if isinstance(x, (int, float)) else float('nan'))
+    feature_importance_df = feature_importance_df.dropna(subset=['importance'])
     feature_importance_df['importance'] = feature_importance_df['importance'].astype(float)
-    feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False)
+    feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False).head(5)  # Selecionar as top 5 características
 
     # Definir um mapeamento de cores consistente
     color_mapping = {
         'genre': 'blue',
-        'director': 'green',
-        'runtime': 'purple',
-        'budget': 'orange'
+        'Director': 'green',
+        'Runtime (Minutes)': 'purple',
+        'Budget (Million)': 'orange'
     }
 
     # Aplicar as cores correspondentes
@@ -265,15 +271,15 @@ def plot_feature_importance(feature_importance, title):
     plt.figure(figsize=(12, 8))
     sns.barplot(x='importance', y='feature', data=feature_importance_df, palette=feature_importance_df['color'].tolist())
 
-    plt.xlabel('Número de Conexões', fontsize=14)
+    plt.xlabel('Importância', fontsize=14)
     plt.ylabel('Características', fontsize=14)
-    plt.title(title, fontsize=16)
+    plt.title('Top 5 Características Mais Importantes para a Receita', fontsize=16)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     
     # Adicionar rótulos de valor nas barras
     for index, value in enumerate(feature_importance_df['importance']):
-        plt.text(value, index, f'{value}', va='center', ha='right', fontsize=12, color='black')
+        plt.text(value, index, f'{value:.2f}', va='center', ha='right', fontsize=12, color='black')
 
     plt.gca().invert_yaxis()  # Inverter o eixo y para mostrar a característica mais importante no topo
     plt.show()  # Certifique-se de que o gráfico seja exibido
@@ -353,6 +359,12 @@ def find_connected_movies(G, df, movie_title):
 def analyze_connection_factors(df, movie_title, connected_movies):
     """Analyze the factors that connect the given movie to its connected movies.""" 
     factors = []
+    factor_counts = {
+        'shared_genres': 0,
+        'shared_director': 0,
+        'similar_runtime': 0,
+        'similar_budget': 0
+    }
     movie_data = df[df['Title'] == movie_title].iloc[0]
     
     for connected_movie in connected_movies:
@@ -369,8 +381,18 @@ def analyze_connection_factors(df, movie_title, connected_movies):
             'similar_runtime': similar_runtime,
             'similar_budget': similar_budget
         })
+
+        # Atualizar contagem de fatores
+        if shared_genres:
+            factor_counts['shared_genres'] += 1
+        if shared_director:
+            factor_counts['shared_director'] += 1
+        if similar_runtime:
+            factor_counts['similar_runtime'] += 1
+        if similar_budget:
+            factor_counts['similar_budget'] += 1
     
-    return factors
+    return factors, factor_counts
 
 def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=1.0):
     """Plot the most successful movie and its connected movies, and analyze the connection factors.""" 
@@ -427,43 +449,6 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
     for factor in connection_factors:
         print(f"Connected movie: {factor['connected_movie']}, Shared genres: {factor['shared_genres']}, Shared director: {factor['shared_director']}, Similar runtime: {factor['similar_runtime']}, Similar budget: {factor['similar_budget']}")
 
-def calculate_mst(G):
-    """Calculate the Minimum Spanning Tree (MST) of the graph.""" 
-    mst = nx.minimum_spanning_tree(G)
-    return mst
-
-def visualize_mst(G, mst, title, k=0.6):
-    """Visualize the Minimum Spanning Tree (MST) using NetworkX and Matplotlib.""" 
-    pos = nx.spring_layout(G, k=k, iterations=20)
-    plt.figure(figsize=(12, 8))
-
-    # Ajustar o tamanho dos nós com base no grau
-    degrees = dict(G.degree())
-    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
-
-    # Desenhar todos os nós e arestas do grafo original
-    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='gray', alpha=0.6)
-    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color='gray')
-
-    # Desenhar os nós e arestas da MST
-    nx.draw_networkx_nodes(mst, pos, node_size=node_sizes, node_color='red', alpha=0.6)
-    nx.draw_networkx_edges(mst, pos, alpha=0.6, width=2, edge_color='blue')
-
-    labels = {node: node for node in mst.nodes}
-    nx.draw_networkx_labels(mst, pos, labels, font_size=8, font_color='black')
-    plt.title(title)
-    plt.axis('off')
-
-    # Adicionar legenda
-    legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='Grafo Original'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Nós da MST'),
-        plt.Line2D([0], [0], color='blue', lw=2, label='Arestas da MST')
-    ]
-    plt.legend(handles=legend_elements, loc='best', title='Legenda')
-
-    plt.show()
-
 def add_missing_connections(G, df, similarity_threshold=0.3):
     """Add connections for movies that have no connections.""" 
     feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Director'] + [col for col in df.columns if col.startswith('genre_')]
@@ -499,6 +484,28 @@ def remove_nodes_without_connections(G):
     G.remove_nodes_from(nodes_to_remove)
     return G
 
+def plot_connection_factors_table(factor_counts):
+    """Plot a table showing the count of connections by factor.""" 
+    data = [
+        ["Fator", "Contagem"],
+        ["Gênero Compartilhado", factor_counts['shared_genres']],
+        ["Diretor Compartilhado", factor_counts['shared_director']],
+        ["Runtime Similar", factor_counts['similar_runtime']],
+        ["Orçamento Similar", factor_counts['similar_budget']]
+    ]
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.axis('tight')
+    ax.axis('off')
+
+    table = ax.table(cellText=data, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.2)
+
+    plt.title("Contagem de Conexões por Fator")
+    plt.show()
+
 def main():
     file_path = 'filmes.csv'
 
@@ -510,7 +517,7 @@ def main():
     df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 0, 200)  # Ajuste os limiares conforme necessário
 
     print("Creating graph (filtered by rating and revenue)...")
-    G_filtered, feature_importance = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
+    G_filtered = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
 
     # Remover nós sem conexões
     print("Removing nodes without connections...")
@@ -537,12 +544,15 @@ def main():
 
     # Analisar fatores de conexão
     print("Analyzing connection factors...")
-    connection_factors = analyze_connection_factors(df_filtered, most_successful_movie['Title'], connected_movies)
+    connection_factors, factor_counts = analyze_connection_factors(df_filtered, most_successful_movie['Title'], connected_movies)
     for factor in connection_factors:
         print(f"Connected movie: {factor['connected_movie']}, Shared genres: {factor['shared_genres']}, Shared director: {factor['shared_director']}, Similar runtime: {factor['similar_runtime']}, Similar budget: {factor['similar_budget']}")
 
     # Plotar o filme de maior sucesso e os filmes conectados a ele
     plot_successful_movie_connections(G_filtered, df_filtered, most_successful_movie['Title'], connected_movies, connection_factors, k=0.6)
+
+    # Plotar tabela de contagem de fatores de conexão
+    plot_connection_factors_table(factor_counts)
 
     # Analisar centralidade
     print("Analyzing centrality (degree)...")
@@ -565,8 +575,9 @@ def main():
     plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes)
 
     # Analisar importância das características para receita
-    print("Analyzing feature importance based on number of connections...")
-    plot_feature_importance(feature_importance, 'Importância das Características com Base no Número de Conexões')
+    print("Analyzing feature importance based on importance score...")
+    feature_importance = measure_execution_time(feature_importance_analysis, df_filtered, 'Revenue (Millions)')
+    plot_feature_importance(feature_importance, 'Top 5 Características Mais Importantes para a Receita')
 
     # Desnormalizar os dados filtrados antes de calcular as estatísticas
     feature_cols = ['Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)']
@@ -577,5 +588,5 @@ def main():
     statistics = calculate_statistics(df_denormalized)
     display_statistics(statistics)
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     main()
