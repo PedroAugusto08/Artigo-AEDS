@@ -130,11 +130,14 @@ def visualize_graph(G, title, partition, k=0.8):
     communities = set(partition.values())
     colors = [cmap(partition[node] / len(communities)) for node in G.nodes]
 
-    # Definir um tamanho fixo para todos os nós
-    node_size = 300
+    # Ajustar o tamanho dos nós com base no grau
+    degrees = dict(G.degree())
+    print("Graus dos nós:", degrees)  # Adicionar mensagem de depuração
+    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
+    print("Tamanhos dos nós:", node_sizes)  # Adicionar mensagem de depuração
 
     # Desenhar nós
-    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color=colors, alpha=0.6)
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=colors, alpha=0.6)
 
     # Desenhar arestas com cores diferentes
     edges = G.edges(data=True)
@@ -151,6 +154,15 @@ def visualize_graph(G, title, partition, k=0.8):
     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=cmap(i / len(communities)), markersize=10) for i in range(len(communities))] 
     labels = [f'Comunidade {i + 1}' for i in range(len(communities))]
     plt.legend(handles, labels, loc='best', title='Comunidades')
+
+    # Adicionar legenda para as arestas
+    edge_legend_elements = [
+        plt.Line2D([0], [0], color='blue', lw=2, label='Conexão por Gênero'),
+        plt.Line2D([0], [0], color='green', lw=2, label='Conexão por Diretor'),
+        plt.Line2D([0], [0], color='purple', lw=2, label='Conexão por Runtime'),
+        plt.Line2D([0], [0], color='orange', lw=2, label='Conexão por Budget')
+    ]
+    plt.legend(handles=handles + edge_legend_elements, loc='best', title='Legenda')
 
     plt.show()
 
@@ -248,22 +260,10 @@ def feature_importance_analysis(df, target):
 def plot_feature_importance(feature_importance, title):
     """Plot a bar chart of the importance of features based on the number of connections.""" 
     feature_importance_df = pd.DataFrame(list(feature_importance.items()), columns=['feature', 'importance'])
-    feature_importance_df['importance'] = feature_importance_df['importance'].astype(float)
     feature_importance_df = feature_importance_df.sort_values(by='importance', ascending=False)
 
-    # Definir um mapeamento de cores consistente
-    color_mapping = {
-        'genre': 'blue',
-        'director': 'green',
-        'runtime': 'purple',
-        'budget': 'orange'
-    }
-
-    # Aplicar as cores correspondentes
-    feature_importance_df['color'] = feature_importance_df['feature'].apply(lambda x: color_mapping.get(x.split('_')[0], 'gray'))
-
     plt.figure(figsize=(12, 8))
-    sns.barplot(x='importance', y='feature', data=feature_importance_df, palette=feature_importance_df['color'].tolist())
+    sns.barplot(x='importance', y='feature', data=feature_importance_df, palette='viridis')
 
     plt.xlabel('Número de Conexões', fontsize=14)
     plt.ylabel('Características', fontsize=14)
@@ -331,24 +331,10 @@ def find_most_successful_movie(df):
     most_successful_movie = df.loc[df['Revenue (Millions)'].idxmax()]
     return most_successful_movie
 
-def find_connected_movies(G, df, movie_title):
-    """Find movies connected to the given movie title in the graph and ensure they share at least one characteristic.""" 
+def find_connected_movies(G, movie_title):
+    """Find movies connected to the given movie title in the graph.""" 
     connected_movies = list(G.neighbors(movie_title))
-    valid_connected_movies = []
-
-    movie_data = df[df['Title'] == movie_title].iloc[0]
-
-    for connected_movie in connected_movies:
-        connected_movie_data = df[df['Title'] == connected_movie].iloc[0]
-        shared_genres = movie_data['Primary Genre'] == connected_movie_data['Primary Genre']
-        shared_director = movie_data['Director'] == connected_movie_data['Director']
-        similar_runtime = abs(movie_data['Runtime (Minutes)'] - connected_movie_data['Runtime (Minutes)']) < 0.1
-        similar_budget = abs(movie_data['Budget (Million)'] - connected_movie_data['Budget (Million)']) < 0.1
-
-        if shared_genres or shared_director or similar_runtime or similar_budget:
-            valid_connected_movies.append(connected_movie)
-
-    return valid_connected_movies
+    return connected_movies
 
 def analyze_connection_factors(df, movie_title, connected_movies):
     """Analyze the factors that connect the given movie to its connected movies.""" 
@@ -372,7 +358,7 @@ def analyze_connection_factors(df, movie_title, connected_movies):
     
     return factors
 
-def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=1.0):
+def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=0.6):
     """Plot the most successful movie and its connected movies, and analyze the connection factors.""" 
     pos = nx.spring_layout(G, k=k, iterations=20)
     plt.figure(figsize=(12, 8))
@@ -387,11 +373,14 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
         else:
             node_colors.append('gray')  # Outros filmes em cinza
 
-    # Definir um tamanho fixo para todos os nós
-    node_size = 300
+    # Ajustar o tamanho dos nós com base no grau
+    degrees = dict(G.degree())
+    print("Graus dos nós:", degrees)  # Adicionar mensagem de depuração
+    node_sizes = [degrees[node] * 100 for node in G.nodes]  # Multiplique por um fator para ajustar o tamanho
+    print("Tamanhos dos nós:", node_sizes)  # Adicionar mensagem de depuração
 
     # Desenhar nós
-    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color=node_colors, alpha=0.6)
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color=node_colors, alpha=0.6)
 
     # Desenhar arestas com cores diferentes
     edges = G.edges(data=True)
@@ -464,9 +453,9 @@ def visualize_mst(G, mst, title, k=0.6):
 
     plt.show()
 
-def add_missing_connections(G, df, similarity_threshold=0.3):
+def add_missing_connections(G, df, similarity_threshold=0.1):
     """Add connections for movies that have no connections.""" 
-    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Director'] + [col for col in df.columns if col.startswith('genre_')]
+    feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)'] + [col for col in df.columns if col.startswith('genre_')]
     feature_matrix = df[feature_cols].values
     similarity_matrix = cosine_similarity(feature_matrix)
 
@@ -507,7 +496,7 @@ def main():
 
     # Aplicar filtros por nota e receita
     print("Preprocessing data (filtered by rating and revenue)...")
-    df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 0, 200)  # Ajuste os limiares conforme necessário
+    df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 0, 100)  # Ajuste os limiares conforme necessário
 
     print("Creating graph (filtered by rating and revenue)...")
     G_filtered, feature_importance = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
@@ -532,7 +521,7 @@ def main():
 
     # Encontrar filmes conectados ao filme de maior sucesso
     print("Finding movies connected to the most successful movie...")
-    connected_movies = find_connected_movies(G_filtered, df_filtered, most_successful_movie['Title'])
+    connected_movies = find_connected_movies(G_filtered, most_successful_movie['Title'])
     print(f"Movies connected to {most_successful_movie['Title']}: {connected_movies}")
 
     # Analisar fatores de conexão
