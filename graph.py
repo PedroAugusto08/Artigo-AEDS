@@ -5,12 +5,11 @@ import seaborn as sns
 import pandas as pd
 import itertools
 import time
-import leidenalg
-import igraph as ig
+import community as community_louvain
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from networkx.algorithms.community import girvan_newman
+
 
 def create_graph(df, similarity_threshold=0.7, max_connections_per_node=10):
     """Create a graph where movies are nodes and edges represent similarity."""
@@ -109,7 +108,7 @@ def visualize_graph(G, title, partition, k=0.5):
     texts = []
     
     for node, (x, y) in pos.items():
-        text = plt.text(x, y, labels[node], fontsize=10, color='black', bbox=dict(facecolor='white', edgecolor='none', alpha=0.1))
+        text = plt.text(x, y, labels[node], fontsize=7, color='black', bbox=dict(facecolor='white', edgecolor='none', alpha=0.1))
         texts.append(text)
 
     # Ajustar automaticamente os rótulos
@@ -159,15 +158,9 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.title("Informações Importantes do Grafo")
     plt.show()
 
-def cluster_graph_girvan_newman(G, k=2):
-    """Cluster the graph using the Girvan-Newman method.""" 
-    comp = girvan_newman(G)
-    limited = itertools.takewhile(lambda c: len(c) <= k, comp)
-    communities = list(limited)[-1]
-    partition = {}
-    for i, community in enumerate(communities):
-        for node in community:
-            partition[node] = i
+def cluster_graph_louvain(G):
+    """Cluster the graph using the Louvain method."""
+    partition = community_louvain.best_partition(G)
     return partition
 
 def analyze_communities(df, partition):
@@ -437,8 +430,8 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
     plt.show()
 
     # Analisar fatores de conexão
-    for factor in connection_factors:
-        print(f"Connected movie: {factor['connected_movie']}, Shared genres: {factor['shared_genres']}, Shared director: {factor['shared_director']}, Similar runtime: {factor['similar_runtime']}, Similar budget: {factor['similar_budget']}")
+    #for factor in connection_factors:
+        #print(f"Connected movie: {factor['connected_movie']}, Shared genres: {factor['shared_genres']}, Shared director: {factor['shared_director']}, Similar runtime: {factor['similar_runtime']}, Similar budget: {factor['similar_budget']}")
 
 def add_missing_connections(G, df, similarity_threshold=0.3):
     """Add connections for movies that have no connections.""" 
