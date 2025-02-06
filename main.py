@@ -2,13 +2,15 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics.pairwise import cosine_similarity
+import itertools
 import time
-import community as community_louvain
+import seaborn as sns
+from sklearn.preprocessing import MinMaxScaler
+from adjustText import adjust_text
+from sklearn.metrics.pairwise import cosine_similarity
+from networkx.algorithms.community import girvan_newman
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-import seaborn as sns
 
 def load_data(file_path):
     """Load movie dataset from CSV.""" 
@@ -53,8 +55,8 @@ def denormalize_data(df, scaler, feature_cols):
     df_denormalized[feature_cols] = scaler.inverse_transform(df[feature_cols])
     return df_denormalized
 
-def create_graph(df, similarity_threshold=0.3):
-    """Create a graph where movies are nodes and edges represent similarity.""" 
+def create_graph(df, similarity_threshold=0.7, max_connections_per_node=10):
+    """Create a graph where movies are nodes and edges represent similarity."""
     G = nx.Graph()
 
     # Add nodes
@@ -68,12 +70,22 @@ def create_graph(df, similarity_threshold=0.3):
 
     # Criar arestas baseadas na similaridade
     for i in range(len(df)):
-        for j in range(i + 1, len(df)):
-            similarity = similarity_matrix[i, j]
-            if similarity >= similarity_threshold:
-                G.add_edge(df.iloc[i]['Title'], df.iloc[j]['Title'], weight=similarity, color='blue')
+        similarities = []  # Lista para armazenar pares (similaridade, índice)
+        for j in range(len(df)):
+            if i != j:  # Evitar auto-conexões
+                similarity = similarity_matrix[i, j]
+                if similarity >= similarity_threshold:
+                    similarities.append((similarity, j))
+
+        # Ordenar por similaridade (descendente) e limitar as conexões
+        similarities = sorted(similarities, reverse=True)[:max_connections_per_node]
+
+        # Criar arestas para os nós mais semelhantes
+        for similarity, j in similarities:
+            G.add_edge(df.iloc[i]['Title'], df.iloc[j]['Title'], weight=similarity, color='blue')
 
     return G
+
 
 def analyze_graph(G):
     """Perform basic graph analysis.""" 
@@ -100,30 +112,56 @@ def analyze_centrality(G, metric='degree'):
     top_central_nodes = sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:3]
     return top_central_nodes
 
-def visualize_graph(G, title, partition, k=0.8):
+def calculate_node_size(G, min_size=200, max_size=1000):
+    """Calculate node sizes based on their degree."""
+    degrees = dict(G.degree())
+    min_degree = min(degrees.values())
+    max_degree = max(degrees.values())
+    
+    # Normalizar tamanhos dos nós
+    node_sizes = {}
+    for node, degree in degrees.items():
+        if max_degree == min_degree:
+            node_sizes[node] = min_size
+        else:
+            node_sizes[node] = min_size + (degree - min_degree) / (max_degree - min_degree) * (max_size - min_size)
+            
+        # Print depurador para exibir o grau de cada nó
+        print(f"Nó: {node}, Grau: {degree}, Tamanho: {node_sizes[node]}")
+    
+    return node_sizes
+
+def visualize_graph(G, title, partition, k=0.5):
     """Visualize the graph using NetworkX and Matplotlib.""" 
-    pos = nx.spring_layout(G, k=k, iterations=20)
-    plt.figure(figsize=(12, 8))
+    pos = nx.spring_layout(G, k=k, iterations=100, seed=42)
+    plt.figure(figsize=(14, 10))
 
     # Colorir nós de acordo com a comunidade
     cmap = plt.get_cmap('viridis')
     communities = set(partition.values())
     colors = [cmap(partition[node] / len(communities)) for node in G.nodes]
 
-    # Definir um tamanho fixo para todos os nós
-    node_size = 300
+    # Calcular tamanhos dos nós com base no grau
+    node_sizes = calculate_node_size(G)
 
-    # Desenhar nós
-    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color=colors, alpha=0.6)
+    # Desenhar nós com menos transparência
+    nx.draw_networkx_nodes(G, pos, node_size=[node_sizes[node] for node in G.nodes], node_color=colors, alpha=0.9)
 
-    # Desenhar arestas com cores diferentes
-    edges = G.edges(data=True)
-    edge_colors = [edge[2]['color'] for edge in edges]
-    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color=edge_colors)
+    # Desenhar arestas com uma única cor
+    nx.draw_networkx_edges(G, pos, alpha=0.6, width=2, edge_color='gray')
 
-    # Desenhar rótulos
-    labels = {node: node for node in G.nodes}  # Exibe todos os rótulos
-    nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
+     # Adicionar rótulos
+    labels = {node: node for node in G.nodes}
+    texts = []
+    
+    for node, (x, y) in pos.items():
+        text = plt.text(x, y, labels[node], fontsize=10, color='black', bbox=dict(facecolor='white', edgecolor='none', alpha=0.3))
+        texts.append(text)
+
+    # Ajustar automaticamente os rótulos
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+    
+    # Adicionar título
     plt.title(title, fontsize=16)
     plt.axis('off')
 
@@ -167,9 +205,15 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     plt.title("Informações Importantes do Grafo")
     plt.show()
 
-def cluster_graph(G):
-    """Cluster the graph using the Louvain method.""" 
-    partition = community_louvain.best_partition(G)
+def cluster_graph_girvan_newman(G, k=2):
+    """Cluster the graph using the Girvan-Newman method.""" 
+    comp = girvan_newman(G)
+    limited = itertools.takewhile(lambda c: len(c) <= k, comp)
+    communities = list(limited)[-1]
+    partition = {}
+    for i, community in enumerate(communities):
+        for node in community:
+            partition[node] = i
     return partition
 
 def analyze_communities(df, partition):
@@ -506,6 +550,8 @@ def plot_connection_factors_table(factor_counts):
     plt.title("Contagem de Conexões por Fator")
     plt.show()
 
+
+
 def main():
     file_path = 'filmes.csv'
 
@@ -523,14 +569,39 @@ def main():
     print("Removing nodes without connections...")
     G_filtered = remove_nodes_without_connections(G_filtered)
 
-    print("Clustering graph...")
-    partition = measure_execution_time(cluster_graph, G_filtered)
+    print("Clustering graph using Girvan-Newman...")
+    partition = measure_execution_time(cluster_graph_girvan_newman, G_filtered, k=5)
 
     print("Analyzing communities...")
     community_info = measure_execution_time(analyze_communities, df_filtered, partition)
 
     print("Visualizing graph (filtered by rating and revenue)...")
     measure_execution_time(visualize_graph, G_filtered, "Graph Filtered by Rating and Revenue", partition, k=0.6)
+    
+    # Analisar importância das características para receita
+    print("Analyzing feature importance based on importance score...")
+    feature_importance = measure_execution_time(feature_importance_analysis, df_filtered, 'Revenue (Millions)')
+    plot_feature_importance(feature_importance, 'Top 5 Características Mais Importantes para a Receita')
+    
+     # Analisar centralidade
+    print("Analyzing centrality (degree)...")
+    top_degree_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='degree')
+    print("Top 3 filmes por grau de centralidade:", top_degree_nodes)
+
+    print("Analyzing centrality (closeness)...")
+    top_closeness_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='closeness')
+    print("Top 3 filmes por centralidade de proximidade:", top_closeness_nodes)
+
+    print("Analyzing centrality (betweenness)...")
+    top_betweenness_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='betweenness')
+    print("Top 3 filmes por centralidade de intermediação:", top_betweenness_nodes)
+
+    # Coletar informações importantes
+    num_nodes = G_filtered.number_of_nodes()
+    num_edges = G_filtered.number_of_edges()
+
+    # Plotar tabela com informações importantes
+    plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes)
 
     # Encontrar o filme de maior sucesso
     print("Finding the most successful movie...")
@@ -553,31 +624,6 @@ def main():
 
     # Plotar tabela de contagem de fatores de conexão
     plot_connection_factors_table(factor_counts)
-
-    # Analisar centralidade
-    print("Analyzing centrality (degree)...")
-    top_degree_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='degree')
-    print("Top 3 filmes por grau de centralidade:", top_degree_nodes)
-
-    print("Analyzing centrality (closeness)...")
-    top_closeness_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='closeness')
-    print("Top 3 filmes por centralidade de proximidade:", top_closeness_nodes)
-
-    print("Analyzing centrality (betweenness)...")
-    top_betweenness_nodes = measure_execution_time(analyze_centrality, G_filtered, metric='betweenness')
-    print("Top 3 filmes por centralidade de intermediação:", top_betweenness_nodes)
-
-    # Coletar informações importantes
-    num_nodes = G_filtered.number_of_nodes()
-    num_edges = G_filtered.number_of_edges()
-
-    # Plotar tabela com informações importantes
-    plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes)
-
-    # Analisar importância das características para receita
-    print("Analyzing feature importance based on importance score...")
-    feature_importance = measure_execution_time(feature_importance_analysis, df_filtered, 'Revenue (Millions)')
-    plot_feature_importance(feature_importance, 'Top 5 Características Mais Importantes para a Receita')
 
     # Desnormalizar os dados filtrados antes de calcular as estatísticas
     feature_cols = ['Runtime (Minutes)', 'Revenue (Millions)', 'Budget (Million)']
