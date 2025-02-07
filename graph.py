@@ -429,10 +429,6 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
 
     plt.show()
 
-    # Analisar fatores de conexão
-    #for factor in connection_factors:
-        #print(f"Connected movie: {factor['connected_movie']}, Shared genres: {factor['shared_genres']}, Shared director: {factor['shared_director']}, Similar runtime: {factor['similar_runtime']}, Similar budget: {factor['similar_budget']}")
-
 def add_missing_connections(G, df, similarity_threshold=0.3):
     """Add connections for movies that have no connections.""" 
     feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Director'] + [col for col in df.columns if col.startswith('genre_')]
