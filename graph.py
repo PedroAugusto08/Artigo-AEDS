@@ -103,7 +103,7 @@ def visualize_graph(G, title, partition, k=0.5):
     # Desenhar arestas com uma única cor
     nx.draw_networkx_edges(G, pos, alpha=0.6, width=2, edge_color='gray')
 
-     # Adicionar rótulos
+    # Adicionar rótulos
     labels = {node: node for node in G.nodes}
     texts = []
     
@@ -362,8 +362,8 @@ def analyze_connection_factors(df, movie_title, connected_movies):
         connected_movie_data = df[df['Title'] == connected_movie].iloc[0]
         shared_genres = movie_data['Primary Genre'] == connected_movie_data['Primary Genre']
         shared_director = movie_data['Director'] == connected_movie_data['Director']
-        similar_runtime = abs(movie_data['Runtime (Minutes)'] - connected_movie_data['Runtime (Minutes)']) < 0.1
-        similar_budget = abs(movie_data['Budget (Million)'] - connected_movie_data['Budget (Million)']) < 0.1
+        similar_runtime = abs(movie_data['Runtime (Minutes)'] - connected_movie_data['Runtime (Minutes)']) < 10
+        similar_budget = abs(movie_data['Budget (Million)'] - connected_movie_data['Budget (Million)']) < 5
 
         factors.append({
             'connected_movie': connected_movie,
@@ -385,10 +385,10 @@ def analyze_connection_factors(df, movie_title, connected_movies):
     
     return factors, factor_counts
 
-def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=1.0):
+def plot_successful_movie_connections(G, df, movie_title, connected_movies, connection_factors, k=0.8):
     """Plot the most successful movie and its connected movies, and analyze the connection factors.""" 
-    pos = nx.spring_layout(G, k=k, iterations=20)
-    plt.figure(figsize=(12, 8))
+    pos = nx.spring_layout(G, k=k, iterations=100, seed=42)
+    plt.figure(figsize=(14, 10))
 
     # Colorir nós
     node_colors = []
@@ -400,20 +400,34 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
         else:
             node_colors.append('gray')  # Outros filmes em cinza
 
-    # Definir um tamanho fixo para todos os nós
-    node_size = 300
+    # Calcular tamanhos dos nós com base no grau
+    node_sizes = calculate_node_size(G)
 
     # Desenhar nós
-    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color=node_colors, alpha=0.6)
+    nx.draw_networkx_nodes(G, pos, node_size=[node_sizes[node] for node in G.nodes], node_color=node_colors, alpha=0.9)
 
-    # Desenhar arestas com cores diferentes
+    # Desenhar arestas
     edges = G.edges(data=True)
-    edge_colors = [edge[2]['color'] for edge in edges]
-    nx.draw_networkx_edges(G, pos, alpha=0.3, width=1, edge_color=edge_colors)
+    edge_colors = []
+    for edge in edges:
+        if (edge[0] == movie_title and edge[1] in connected_movies) or (edge[1] == movie_title and edge[0] in connected_movies):
+            edge_colors.append('blue')  # Arestas conectadas ao filme de maior sucesso em azul
+        else:
+            edge_colors.append('gray')  # Outras arestas em cinza
 
-    # Desenhar rótulos
-    labels = {node: node for node in G.nodes if node == movie_title or node in connected_movies}
-    nx.draw_networkx_labels(G, pos, labels, font_size=8, font_color='black')
+    nx.draw_networkx_edges(G, pos, alpha=0.6, width=2, edge_color=edge_colors)
+
+    # Adicionar rótulos
+    labels = {node: node for node in G.nodes}
+    texts = []
+    
+    for node, (x, y) in pos.items():
+        text = plt.text(x, y, labels[node], fontsize=7, color='black', bbox=dict(facecolor='white', edgecolor='none', alpha=0.1))
+        texts.append(text)
+
+    # Ajustar automaticamente os rótulos
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+    
     plt.title(f"Filme de Maior Sucesso e Filmes Conectados: {movie_title}")
     plt.axis('off')
 
@@ -424,12 +438,10 @@ def plot_successful_movie_connections(G, df, movie_title, connected_movies, conn
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='Outros Filmes')
     ]
 
-
     plt.legend(handles=legend_elements, loc='best', title='Legenda')
-
     plt.show()
 
-def add_missing_connections(G, df, similarity_threshold=0.3):
+#def add_missing_connections(G, df, similarity_threshold=0.3):
     """Add connections for movies that have no connections.""" 
     feature_cols = ['Rating', 'Runtime (Minutes)', 'Revenue (Millions)', 'Director'] + [col for col in df.columns if col.startswith('genre_')]
     feature_matrix = df[feature_cols].values

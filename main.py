@@ -9,7 +9,7 @@ def main():
 
     # Aplicar filtros por nota e receita
     print("Preprocessing data (filtered by rating and revenue)...")
-    df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 0, 200)  # Ajuste os limiares conforme necessário
+    df_filtered, scaler = measure_execution_time(preprocess_data, df.copy(), 0, 0)  # Ajuste os limiares conforme necessário
 
     print("Creating graph (filtered by rating and revenue)...")
     G_filtered = measure_execution_time(create_graph, df_filtered, similarity_threshold=0.5)
