@@ -112,7 +112,7 @@ def visualize_graph(G, title, partition, k=0.5):
         texts.append(text)
 
     # Ajustar automaticamente os rótulos
-    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.1))
     
     # Adicionar título
     plt.title(title, fontsize=16)
@@ -133,8 +133,13 @@ def measure_execution_time(func, *args, **kwargs):
     print(f"Execution time for {func.__name__}: {end_time - start_time:.2f} seconds")
     return result
 
+def calculate_average_degree(G):
+    """Calculate the average degree of nodes in the graph."""
+    degrees = dict(G.degree())
+    average_degree = sum(degrees.values()) / len(degrees)
+    return average_degree
 
-def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes):
+def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes, top_betweenness_nodes, average_degree):
     """Plot a table with important graph information.""" 
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.axis('tight')
@@ -144,6 +149,7 @@ def plot_info_table(num_nodes, num_edges, top_degree_nodes, top_closeness_nodes,
     data = [
         ["Número de Nós", num_nodes],
         ["Número de Arestas", num_edges],
+        ["Grau Médio dos Nós", f"{average_degree:.2f}"],
         ["Top 3 Filmes por Grau de Centralidade", ", ".join([node for node, _ in top_degree_nodes])],
         ["Top 3 Filmes por Centralidade de Proximidade", ", ".join([node for node, _ in top_closeness_nodes])],
         ["Top 3 Filmes por Centralidade de Intermediação", ", ".join([node for node, _ in top_betweenness_nodes])],
@@ -339,8 +345,8 @@ def find_connected_movies(G, df, movie_title):
         connected_movie_data = df[df['Title'] == connected_movie].iloc[0]
         shared_genres = movie_data['Primary Genre'] == connected_movie_data['Primary Genre']
         shared_director = movie_data['Director'] == connected_movie_data['Director']
-        similar_runtime = abs(movie_data['Runtime (Minutes)'] - connected_movie_data['Runtime (Minutes)']) < 0.1
-        similar_budget = abs(movie_data['Budget (Million)'] - connected_movie_data['Budget (Million)']) < 0.1
+        similar_runtime = abs(movie_data['Runtime (Minutes)'] - connected_movie_data['Runtime (Minutes)']) < 10
+        similar_budget = abs(movie_data['Budget (Million)'] - connected_movie_data['Budget (Million)']) < 10
 
         if shared_genres or shared_director or similar_runtime or similar_budget:
             valid_connected_movies.append(connected_movie)
