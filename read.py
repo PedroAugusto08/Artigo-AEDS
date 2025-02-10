@@ -7,8 +7,8 @@ def load_data(file_path):
     df = pd.read_csv(file_path, delimiter=';')
     return df
 
-def preprocess_data(df, rating_threshold, revenue_threshold):
-    """Filter dataset and preprocess.""" 
+def preprocess_data(df, revenue_threshold):
+    """Filter dataset and preprocess based only on revenue.""" 
     scaler = MinMaxScaler()
 
     # Substituir vírgulas por pontos e converter colunas numéricas para float
@@ -22,8 +22,8 @@ def preprocess_data(df, rating_threshold, revenue_threshold):
     # Converter colunas numéricas para float
     df['Runtime (Minutes)'] = df['Runtime (Minutes)'].replace({'N/A': None, 'Unknown': None}).astype(float)
 
-    # Aplicar filtros baseados em nota e receita
-    df = df[(df['Rating'] >= rating_threshold) & (df['Revenue (Millions)'] >= revenue_threshold)]
+    # Aplicar filtro baseado apenas em receita
+    df = df[df['Revenue (Millions)'] >= revenue_threshold]
 
     # Tratar valores faltantes
     df['Runtime (Minutes)'] = df['Runtime (Minutes)'].fillna(df['Runtime (Minutes)'].median())
